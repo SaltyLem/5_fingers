@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 
 type Entry = {
   id: string;
@@ -67,6 +67,7 @@ function readFileAsDataURL(file: File): Promise<string> {
 
 export default function RoomPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [name, setName] = useState("");
   const [nameSet, setNameSet] = useState(false);
   const [fingers, setFingers] = useState<number | null>(null);
@@ -258,12 +259,30 @@ export default function RoomPage() {
                 </div>
               )}
             </div>
-            <button
-              onClick={copyLink}
-              className="rounded-md px-3 py-1.5 text-sm text-secondary transition-colors hover:bg-hover hover:text-foreground"
-            >
-              {copied ? "コピーした!" : "リンクをコピー"}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={copyLink}
+                className="rounded-md px-3 py-1.5 text-sm text-secondary transition-colors hover:bg-hover hover:text-foreground"
+              >
+                {copied ? "コピーした!" : "リンクをコピー"}
+              </button>
+              <button
+                onClick={() => router.push("/")}
+                className="rounded-md px-3 py-1.5 text-sm text-secondary transition-colors hover:bg-hover hover:text-foreground"
+              >
+                タイトルに戻る
+              </button>
+              <button
+                onClick={async () => {
+                  if (!confirm("ルームを閉じますか？全てのデータが削除されます。")) return;
+                  await fetch(`/api/room/${id}`, { method: "DELETE" });
+                  router.push("/");
+                }}
+                className="rounded-md px-3 py-1.5 text-sm text-red-500 transition-colors hover:bg-red-500/10"
+              >
+                ルームを閉じる
+              </button>
+            </div>
           </div>
 
           {/* Finger selector */}
