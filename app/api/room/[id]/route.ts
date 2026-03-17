@@ -1,4 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Redis } from "@upstash/redis";
+
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL!,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+});
 
 type Entry = {
   id: string;
@@ -9,26 +15,21 @@ type Entry = {
   timestamp: number;
 };
 
-const EXPIRE_MS = 30 * 60 * 1000; // 30 minutes
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB per image
+const EXPIRE_SECONDS = 30 * 60; // 30 minutes
 const MAX_IMAGES = 5;
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
-// In-memory store: roomId -> date -> entries
-const rooms = new Map<string, Map<string, Entry[]>>();
+function roomKey(roomId: string, date: string) {
+  return `room:${roomId}:${date}`;
+}
+
+function entryKey(roomId: string, date: string, entryId: string) {
+  return `entry:${roomId}:${date}:${entryId}`;
+}
 
 function getTodayKey() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-}
-
-function getEntries(roomId: string, date: string): Entry[] {
-  const entries = rooms.get(roomId)?.get(date) ?? [];
-  const now = Date.now();
-  const active = entries.filter((e) => now - e.timestamp < EXPIRE_MS);
-  if (active.length !== entries.length) {
-    rooms.get(roomId)?.set(date, active);
-  }
-  return active;
 }
 
 export async function GET(
@@ -37,7 +38,39 @@ export async function GET(
 ) {
   const { id } = await params;
   const today = getTodayKey();
-  const entries = getEntries(id, today);
+  const key = roomKey(id, today);
+
+  const entryIds = await redis.smembers(key) as string[];
+  if (entryIds.length === 0) {
+    return NextResponse.json({ entries: [], date: today });
+  }
+
+  const pipeline = redis.pipeline();
+  for (const eid of entryIds) {
+    pipeline.get(entryKey(id, today, eid));
+  }
+  const results = await pipeline.exec();
+
+  const entries: Entry[] = [];
+  const expiredIds: string[] = [];
+
+  for (let i = 0; i < results.length; i++) {
+    if (results[i]) {
+      entries.push(results[i] as Entry);
+    } else {
+      expiredIds.push(entryIds[i]);
+    }
+  }
+
+  // Clean up expired entry references
+  if (expiredIds.length > 0) {
+    const cleanPipeline = redis.pipeline();
+    for (const eid of expiredIds) {
+      cleanPipeline.srem(key, eid);
+    }
+    await cleanPipeline.exec();
+  }
+
   return NextResponse.json({ entries, date: today });
 }
 
@@ -59,25 +92,36 @@ export async function POST(
       .filter((img: unknown): img is string =>
         typeof img === "string" &&
         img.startsWith("data:image/") &&
-        img.length <= MAX_IMAGE_SIZE * 1.37 // base64 overhead
+        img.length <= MAX_IMAGE_SIZE * 1.37
       )
       .slice(0, MAX_IMAGES);
   }
 
   const today = getTodayKey();
+  const key = roomKey(id, today);
 
-  if (!rooms.has(id)) {
-    rooms.set(id, new Map());
-  }
-  const roomData = rooms.get(id)!;
-  if (!roomData.has(today)) {
-    roomData.set(today, []);
-  }
-  const entries = roomData.get(today)!;
+  // Check for existing entry by this user
+  const entryIds = await redis.smembers(key) as string[];
+  let existingId: string | null = null;
 
-  const existingIndex = entries.findIndex((e) => e.name === name);
+  if (entryIds.length > 0) {
+    const pipeline = redis.pipeline();
+    for (const eid of entryIds) {
+      pipeline.get(entryKey(id, today, eid));
+    }
+    const results = await pipeline.exec();
+    for (let i = 0; i < results.length; i++) {
+      const e = results[i] as Entry | null;
+      if (e && e.name === name) {
+        existingId = entryIds[i];
+        break;
+      }
+    }
+  }
+
+  const entryId = existingId || crypto.randomUUID();
   const entry: Entry = {
-    id: crypto.randomUUID(),
+    id: entryId,
     name,
     fingers,
     comment: comment || "",
@@ -85,11 +129,12 @@ export async function POST(
     timestamp: Date.now(),
   };
 
-  if (existingIndex >= 0) {
-    entries[existingIndex] = entry;
-  } else {
-    entries.push(entry);
-  }
+  const eKey = entryKey(id, today, entryId);
+  const pipeline = redis.pipeline();
+  pipeline.set(eKey, JSON.stringify(entry), { ex: EXPIRE_SECONDS });
+  pipeline.sadd(key, entryId);
+  pipeline.expire(key, EXPIRE_SECONDS);
+  await pipeline.exec();
 
   return NextResponse.json({ entry });
 }
