@@ -305,7 +305,7 @@ export default function RoomPage() {
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
                 onPaste={handlePaste}
-                placeholder="コメント（任意）画像はドロップ or ペーストで追加"
+                placeholder="コメント（任意）&#10;※ 秘匿情報（パスワード等）は書かないでください"
                 rows={3}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSubmit();
