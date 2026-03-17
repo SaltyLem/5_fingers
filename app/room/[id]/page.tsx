@@ -212,9 +212,38 @@ export default function RoomPage() {
       <div className={`min-h-screen flex-1 transition-all ${selectedEntry ? "mr-[380px]" : ""}`}>
         <div className="mx-auto max-w-2xl px-6 py-8">
           {/* Header */}
-          <div className="mb-8 flex items-center justify-between border-b border-border pb-4">
-            <div>
-              <h1 className="text-2xl font-bold text-foreground">{id}</h1>
+          <div className="mb-8 border-b border-border pb-4">
+            {/* Top row */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => router.push("/")}
+                className="shrink-0 rounded-md p-1.5 text-secondary transition-colors hover:bg-hover hover:text-foreground"
+                title="タイトルに戻る"
+              >
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M11 4L6 9l5 5" />
+                </svg>
+              </button>
+              <h1 className="flex-1 text-xl font-bold text-foreground">{id}</h1>
+              <button
+                onClick={copyLink}
+                className="rounded-md px-2.5 py-1 text-xs text-secondary transition-colors hover:bg-hover hover:text-foreground"
+              >
+                {copied ? "コピーした!" : "リンクをコピー"}
+              </button>
+              <button
+                onClick={async () => {
+                  if (!confirm("ルームを閉じますか？全てのデータが削除されます。")) return;
+                  await fetch(`/api/room/${id}`, { method: "DELETE" });
+                  router.push("/");
+                }}
+                className="rounded-md px-2.5 py-1 text-xs text-red-500 transition-colors hover:bg-red-500/10"
+              >
+                ルームを閉じる
+              </button>
+            </div>
+            {/* Name row */}
+            <div className="mt-1.5 ml-9">
               {editingName ? (
                 <form
                   onSubmit={(e) => {
@@ -225,7 +254,7 @@ export default function RoomPage() {
                     }
                     setEditingName(false);
                   }}
-                  className="mt-1 flex items-center gap-2"
+                  className="flex items-center gap-2"
                 >
                   <input
                     autoFocus
@@ -233,55 +262,20 @@ export default function RoomPage() {
                     onChange={(e) => setNameDraft(e.target.value)}
                     className="w-32 rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground outline-none focus:border-accent"
                   />
-                  <button
-                    type="submit"
-                    className="rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-white hover:opacity-90"
-                  >
-                    保存
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditingName(false)}
-                    className="rounded-md px-2.5 py-1 text-xs text-secondary hover:bg-hover"
-                  >
-                    キャンセル
-                  </button>
+                  <button type="submit" className="rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-white hover:opacity-90">保存</button>
+                  <button type="button" onClick={() => setEditingName(false)} className="rounded-md px-2.5 py-1 text-xs text-secondary hover:bg-hover">キャンセル</button>
                 </form>
               ) : (
-                <div className="mt-0.5 flex items-center gap-2">
+                <div className="flex items-center gap-2">
                   <p className="text-sm text-secondary">{name} として参加中</p>
                   <button
                     onClick={() => { setNameDraft(name); setEditingName(true); }}
-                    className="rounded-md px-2 py-0.5 text-xs text-secondary transition-colors hover:bg-hover hover:text-foreground"
+                    className="text-xs text-secondary transition-colors hover:text-foreground"
                   >
-                    名前を変更
+                    変更
                   </button>
                 </div>
               )}
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={copyLink}
-                className="rounded-md px-3 py-1.5 text-sm text-secondary transition-colors hover:bg-hover hover:text-foreground"
-              >
-                {copied ? "コピーした!" : "リンクをコピー"}
-              </button>
-              <button
-                onClick={() => router.push("/")}
-                className="rounded-md px-3 py-1.5 text-sm text-secondary transition-colors hover:bg-hover hover:text-foreground"
-              >
-                タイトルに戻る
-              </button>
-              <button
-                onClick={async () => {
-                  if (!confirm("ルームを閉じますか？全てのデータが削除されます。")) return;
-                  await fetch(`/api/room/${id}`, { method: "DELETE" });
-                  router.push("/");
-                }}
-                className="rounded-md px-3 py-1.5 text-sm text-red-500 transition-colors hover:bg-red-500/10"
-              >
-                ルームを閉じる
-              </button>
             </div>
           </div>
 
